@@ -4,6 +4,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <thread>
+#include <mutex>
 #include "pfacesUtils.h"
 
 #ifdef _MSC_VER
@@ -47,9 +49,12 @@ public:
 
 	// processes
 	static std::string exec_blocking(std::string cmd);
-	static std::shared_ptr<FILE> exec_non_blocking(std::string cmd);
-	static std::pair<std::string, EXEC_STATUS> non_blocking_exec_status(std::shared_ptr<FILE>& pipe);
-	static void non_blocking_exec_kill(std::shared_ptr<FILE>& pipe);
+	static void exec_non_blocking_thread_ready(
+		const std::string& cmd,
+		std::shared_ptr<std::string> result,
+		std::shared_ptr<bool> done_notifier,
+		std::shared_ptr<bool> kill_signal,
+		std::shared_ptr<std::mutex> thread_mutex);
 };
 
 #endif // !PFACES_AGENT_UTILS

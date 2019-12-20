@@ -1,4 +1,7 @@
 #include <codecvt>
+#include <thread>
+#include <mutex>
+
 #include "pfaces-agent-utils.h"
 
 #define _TURN_OFF_PLATFORM_STRING
@@ -154,33 +157,32 @@ std::string pfacesAgentUtils::exec_blocking(std::string cmd) {
 }
 
 // execute a command asynchronously and return a pipe pointer
-std::shared_ptr<FILE> pfacesAgentUtils::exec_non_blocking(std::string cmd) {
-	FILE* f = POPEN(cmd.c_str(), "r");	
-	int d = fileno(f);
-	fcntl(d, F_SETFL, O_NONBLOCK);
-	
-	std::shared_ptr<FILE> pipe(f);
-	return pipe;
-}
-std::pair<std::string, EXEC_STATUS> pfacesAgentUtils::non_blocking_exec_status(std::shared_ptr<FILE>& pipe) {
-	FILE* f = &(*pipe);
-	int d = fileno(f);
-	char buffer[1024];
-	
-	auto r = read(d, buffer, sizeof buffer);
+void pfacesAgentUtils::exec_non_blocking_thread_ready(
+	const std::string& cmd, 
+	std::shared_ptr<std::string> result, 
+	std::shared_ptr<bool> done_notifier,
+	std::shared_ptr<bool> kill_signal,
+	std::shared_ptr<std::mutex> thread_mutex) {
 
-	if (r == -1 && errno == EAGAIN){
-		return std::make_pair(std::string(""), EXEC_STATUS::NO_DATA_YET);
+	char buffer[1024];
+	FILE* pipe = POPEN(cmd.c_str(), "r");
+
+	if (!pipe)
+		throw std::runtime_error("exec: popen() failed!");
+
+	try {
+		while (fgets(buffer, sizeof buffer, pipe) != NULL && !(*kill_signal)) {
+			(*thread_mutex).lock();
+			*result += buffer;
+			(*thread_mutex).unlock();
+		}
 	}
-	else if (r > 0){
-		std::string data(buffer);
-		return std::make_pair(data, EXEC_STATUS::DATA_RECIEVED);
+	catch (...) {
+		PCLOSE(pipe);
+		throw;
 	}
-	else{
-		return std::make_pair(std::string(""), EXEC_STATUS::PIPE_CLOSED);
-	}
-}
-void pfacesAgentUtils::non_blocking_exec_kill(std::shared_ptr<FILE>& pipe) {
-	FILE* f = &(*pipe);
-	PCLOSE(f);
+	PCLOSE(pipe);
+	(*thread_mutex).lock();
+	*done_notifier = true;
+	(*thread_mutex).unlock();
 }

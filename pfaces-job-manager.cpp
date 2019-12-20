@@ -6,6 +6,13 @@ pFacesJob::pFacesJob(size_t _id, const std::string& _launch_cmd) {
 	launch_cmd = _launch_cmd;
 	id = _id;
 	status = PFACES_JOB_STATUS::idle;
+
+	output = std::make_shared<std::string>("");
+	done_notifier = std::make_shared<bool>();
+	*done_notifier = false;
+	kill_signal = std::make_shared<bool>();
+	*kill_signal = false;
+	thread_mutex = std::make_shared<std::mutex>();
 }
 std::string pFacesJob::getLaunchCommand() {
 	return launch_cmd;
@@ -34,7 +41,9 @@ std::string pFacesJob::statusStr() {
 	}
 }
 std::string pFacesJob::outputStr() {
-	return output;
+	thread_mutex->lock();
+	return *output;
+	thread_mutex->unlock();
 }
 void pFacesJob::refresh() {
 	// TODO: upodate status + get latest output
@@ -45,7 +54,15 @@ void pFacesJob::run() {
 		status == PFACES_JOB_STATUS::killed)
 		return;
 
-	// TODO: start it if idle
+	job_thread = std::make_shared<std::thread>(
+			pfacesAgentUtils::exec_non_blocking_thread_ready,
+			launch_cmd,
+			output,	
+			done_notifier,
+			kill_signal,
+			thread_mutex
+		);
+
 	status = PFACES_JOB_STATUS::started;
 }
 void pFacesJob::kill() {
@@ -59,7 +76,11 @@ void pFacesJob::kill() {
 		return;
 	}
 
-	// TODO: kill if started
+	thread_mutex->lock();
+	*kill_signal = true;
+	thread_mutex->unlock();
+	job_thread->join();
+
 	status = PFACES_JOB_STATUS::killed;
 }
 
@@ -69,6 +90,7 @@ size_t pfacesJobManager::launchJob(const std::string& _launch_cmd) {
 	std::shared_ptr<pFacesJob> newJob = std::make_shared<pFacesJob>(new_id, _launch_cmd);
 	pfacesJobs.push_back(newJob);
 	newJob->run();
+	return new_id;
 }
 void pfacesJobManager::killJob(size_t id) {
 	// dont delete the job from the list

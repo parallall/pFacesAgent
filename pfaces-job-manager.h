@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <thread>
+#include <mutex>
 
 // a class to maintain a running job
 class pFacesJob {
@@ -16,7 +18,13 @@ class pFacesJob {
 	size_t id;
 	std::string launch_cmd;
 	PFACES_JOB_STATUS status;
-	std::string output;
+	
+	std::shared_ptr<std::thread> job_thread;
+	std::shared_ptr <std::string> output;
+	std::shared_ptr<bool> done_notifier;
+	std::shared_ptr<bool> kill_signal;
+	std::shared_ptr<std::mutex> thread_mutex;
+
 public:
 	pFacesJob(size_t _id, const std::string& _launch_cmd);
 	std::string getLaunchCommand();
