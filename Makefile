@@ -1,3 +1,4 @@
+SUBDIRS = lib
 
 .PHONY: clean push pull
 
@@ -13,6 +14,7 @@ clean:
 	rm -f ./lib/*.a
 	rm -f -r ./include/config4cpp
 	rm -f -r ./include/symbolic
+	for dir in $(SUBDIRS); do $(MAKE) clean -C $$dir $@; done
 
 pull:
 	git pull
