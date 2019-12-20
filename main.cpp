@@ -17,8 +17,9 @@
 #endif // _MSC_VER
 
 #define AGENT_MAIN "pfaces-agent\\main"
-
 #define TEST_MODE
+
+
 #ifdef TEST_MODE
 std::shared_ptr<pFacesAgent> spSingleAgent;
 void exitSignalHandler(int signum) {

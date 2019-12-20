@@ -11,7 +11,6 @@ clean:
 	rm -f ./lib_x86/*.lib
 	rm -f ./lib_x64/*.lib
 	rm -f ./lib/*.a
-	find ./include/ -type f -not -name 'pfaces-sdk.h' -delete
 	rm -f -r ./include/config4cpp
 	rm -f -r ./include/symbolic
 

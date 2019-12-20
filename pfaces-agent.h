@@ -8,20 +8,12 @@
 #include <vector>
 
 #include "pfacesRemoteInterface.h"
+#include "pfaces-agent-helper.h"
 
 enum LaunchModes {
 	RUN,
 	INSTALL,
 	UNINSTALL,
-};
-
-class AgentConfigs {
-public:
-	std::string id;
-	int listen_port;
-	std::string device_mask;
-	std::string device_ids_list;
-	bool device_abuse;
 };
 
 // pFacesAgent class

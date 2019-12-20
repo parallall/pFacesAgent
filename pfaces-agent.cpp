@@ -7,7 +7,6 @@
 using namespace std::chrono_literals;
 
 #include "pfaces-agent.h"
-#include "pfaces-agent-helper.h"
 #include "Logger.h"
 
 
@@ -19,8 +18,38 @@ using namespace std::chrono_literals;
 
 // serving thread functions
 void userManager(pFacesAgent* pAgent, size_t userIndexInDictionary) {
+	
+	std::shared_ptr<pfacesRESTfullDictionaryServer> spUserDictionary = pAgent->userDictionaryServers[userIndexInDictionary];
+	std::string user_id = spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
+	
+	// declare ready status
+	spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_ready);
+
+	// preocess requests
 	while (!pAgent->kill_signal) {
 
+		// process any submitted CR
+		size_t cnt_pending_cr = pFacesAgentHelper::countPendingCommandRequest(spUserDictionary);
+		if(cnt_pending_cr != 0){
+			// set to busy
+			spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_busy);
+
+			std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> cr_process_result =
+			pFacesAgentHelper::processNextPendingCommandRequest(spUserDictionary);
+			if (cr_process_result.first != pFacesAgentHelper::COMMAND_REQUESTS::NONE) {
+				Logger::log("pFacesAgent/userManager", std::string("For user_id = ") + user_id +
+					std::string(" we served a command-request of type ") + pFacesAgentHelper::commandRequestToString(cr_process_result.first) +
+					std::string(" with result=") + 
+					std::string(cr_process_result.second?"success":"failure")
+				);
+			}
+
+			// back to ready
+			spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_ready);
+		}
+
+		// check other commands 
+		// TODO
 
 		// sleep for a while !
 		std::this_thread::sleep_for(THREAD_SLEEP_TIME);
@@ -34,7 +63,7 @@ size_t addNewUser(
 
 	// Add item to userDictionaryServers and fill initial values in this item
 	std::shared_ptr<pfacesRESTfullDictionaryServer> userDictionary = std::make_shared<pfacesRESTfullDictionaryServer>();
-	auto keyValuePairs = pFacesAgentHelper::initializeUserDictionary(user_id);
+	auto keyValuePairs = pFacesAgentHelper::initializeUserDictionary(user_id, pAgent->m_configs);
 	std::vector<std::string> keysOnly;
 	for (size_t i = 0; i < keyValuePairs.size(); i++)
 		keysOnly.push_back(keyValuePairs[i].first);	
@@ -73,6 +102,9 @@ void loginManager(pFacesAgent* pAgent) {
 
 					std::string loginUrl = pAgent->userDictionaryServers[userIndexInDictionary]->getUrl();
 					std::string loginPort = std::to_string(newUserPort);
+
+					Logger::log("pFacesAgent/loginManager", std::string("The user can use the following REST node:") + loginUrl);
+
 					userLoginJSONstr = pFacesAgentHelper::setLoginInfo(userLoginJSONstr, loginUrl, loginPort);
 					success = true;
 				}

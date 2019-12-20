@@ -36,6 +36,15 @@
     <ClInclude Include="pfaces-agent-helper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="base64.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pfaces-job-manager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pfaces-agent-utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -57,6 +66,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pfaces-agent-helper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="base64.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pfaces-job-manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pfaces-agent-utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
