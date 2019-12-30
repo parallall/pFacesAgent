@@ -7,6 +7,7 @@
 using namespace std::chrono_literals;
 
 #include "pfaces-agent.h"
+#include "pfaces-job-manager.h"
 #include "Logger.h"
 
 
@@ -17,25 +18,37 @@ using namespace std::chrono_literals;
 
 
 // serving thread functions
-void userManager(pFacesAgent* pAgent, size_t userIndexInDictionary) {
+void userManager(std::shared_ptr<pFacesAgent> spAgent, size_t userIndexInDictionary) {
 	
-	std::shared_ptr<pfacesRESTfullDictionaryServer> spUserDictionary = pAgent->userDictionaryServers[userIndexInDictionary];
+	// getting the dictionary
+	std::shared_ptr<pfacesRESTfullDictionaryServer> spUserDictionary = spAgent->userDictionaryServers[userIndexInDictionary];
 	std::string user_id = spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
+
+	// creating a job manager
+	std::shared_ptr<pfacesJobManager> spJobManager = std::make_shared<pfacesJobManager>();
+
+	// create the user context
+	pFacesAgentUserContext userContext;
+	userContext.spJobManager = spJobManager;
+	userContext.spUserDictionary = spUserDictionary;
+	userContext.spAgentConfigs = spAgent->m_configs;
+
 	
 	// declare ready status
 	spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_ready);
 
 	// preocess requests
-	while (!pAgent->kill_signal) {
+	bool the_kill_signal = false;
+	while (!the_kill_signal) {
 
 		// process any submitted CR
-		size_t cnt_pending_cr = pFacesAgentHelper::countPendingCommandRequest(spUserDictionary);
+		size_t cnt_pending_cr = pFacesAgentHelper::countPendingCommandRequest(userContext);
 		if(cnt_pending_cr != 0){
 			// set to busy
 			spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_busy);
 
 			std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> cr_process_result =
-			pFacesAgentHelper::processNextPendingCommandRequest(spUserDictionary);
+			pFacesAgentHelper::processNextPendingCommandRequest(userContext);
 			if (cr_process_result.first != pFacesAgentHelper::COMMAND_REQUESTS::NONE) {
 				Logger::log("pFacesAgent/userManager", std::string("For user_id = ") + user_id +
 					std::string(" we served a command-request of type ") + pFacesAgentHelper::commandRequestToString(cr_process_result.first) +
@@ -48,59 +61,78 @@ void userManager(pFacesAgent* pAgent, size_t userIndexInDictionary) {
 			spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_ready);
 		}
 
+		// update jobs table
+		std::string jobsTableJson = spJobManager->getJobsTableJSON(
+			PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_ID_JSON_KEY,
+			PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_ID_JSON_CMD,
+			PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_STATUS_JSON_KEY,
+			PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_DETAILS_JSON_KEY
+		);
+		spUserDictionary->setKeyValue(
+			PFACES_AGENT_USER_DICT_JOBS_LIST,
+			jobsTableJson);
+
+
 		// check other commands 
 		// TODO
 
 		// sleep for a while !
 		std::this_thread::sleep_for(THREAD_SLEEP_TIME);
+
+
+		spAgent->sp_kill_signal_mutex->lock();
+		the_kill_signal = spAgent->kill_signal;
+		spAgent->sp_kill_signal_mutex->unlock();
 	}
 }
 
 size_t addNewUser(
 	std::string user_id,
-	pFacesAgent* pAgent,
+	std::shared_ptr<pFacesAgent> spAgent,
 	size_t newUserPort) {
 
 	// Add item to userDictionaryServers and fill initial values in this item
 	std::shared_ptr<pfacesRESTfullDictionaryServer> userDictionary = std::make_shared<pfacesRESTfullDictionaryServer>();
-	auto keyValuePairs = pFacesAgentHelper::initializeUserDictionary(user_id, pAgent->m_configs);
+	auto keyValuePairs = pFacesAgentHelper::initializeUserDictionary(user_id, spAgent->m_configs);
 	std::vector<std::string> keysOnly;
 	for (size_t i = 0; i < keyValuePairs.size(); i++)
 		keysOnly.push_back(keyValuePairs[i].first);	
 	userDictionary->setup(PFACES_AGENT_HOST, std::to_string(newUserPort), keysOnly, std::string(PFACES_AGENT_NAME_CLEINT) + user_id);
 	for (size_t i = 0; i < keyValuePairs.size(); i++)
 		userDictionary->setKeyValue(keyValuePairs[i].first, keyValuePairs[i].second);
-	pAgent->userDictionaryServers.push_back(userDictionary);
-	size_t userIndexInDictionary = pAgent->userDictionaryServers.size() - 1;
+	spAgent->userDictionaryServers.push_back(userDictionary);
+	size_t userIndexInDictionary = spAgent->userDictionaryServers.size() - 1;
 	
 	// Create a thread in (userManagerThreads) to call (userManager) with this item
-	std::shared_ptr<std::thread> userManagerThread = std::make_shared<std::thread>(userManager, pAgent, userIndexInDictionary);
-	pAgent->userManagerThreads.push_back(userManagerThread);
+	std::shared_ptr<std::thread> userManagerThread = 
+		std::make_shared<std::thread>(userManager, spAgent, userIndexInDictionary);
+	spAgent->userManagerThreads.push_back(userManagerThread);
 
 	return userIndexInDictionary;
 }
 
-void loginManager(pFacesAgent* pAgent) {
-	while (!pAgent->kill_signal) {
+void loginManager(std::shared_ptr<pFacesAgent> spAgent) {
+	bool the_kill_signal = false;
+	while (!the_kill_signal) {
 
-		const std::vector<std::string>& allUserIds = pAgent->LoginDictionaryServer->getAllKeys();
+		const std::vector<std::string>& allUserIds = spAgent->LoginDictionaryServer->getAllKeys();
 
 		// iterate over all login items
 		for (size_t i = 0; i < allUserIds.size(); i++){
 			std::string user_id = allUserIds[i];
-			std::string userLoginJSONstr = pAgent->LoginDictionaryServer->getKeyValue(user_id);
+			std::string userLoginJSONstr = spAgent->LoginDictionaryServer->getKeyValue(user_id);
 
 			if (pFacesAgentHelper::isLoginNew(userLoginJSONstr)) {
 
 				Logger::log("pFacesAgent/loginManager", std::string("Login manger recieved a new login request from user_id = ") + user_id);
 				bool success = false;
-				size_t newUserPort = pAgent->last_assigned_port + 1;
+				size_t newUserPort = spAgent->last_assigned_port + 1;
 				std::string msg = "";
 				try {
-					size_t userIndexInDictionary = addNewUser(user_id, pAgent, newUserPort);
+					size_t userIndexInDictionary = addNewUser(user_id, spAgent, newUserPort);
 					Logger::log("pFacesAgent/loginManager", std::string("Login manger created a new user for user_id = ") + user_id);
 
-					std::string loginUrl = pAgent->userDictionaryServers[userIndexInDictionary]->getUrl();
+					std::string loginUrl = spAgent->userDictionaryServers[userIndexInDictionary]->getUrl();
 					std::string loginPort = std::to_string(newUserPort);
 
 					Logger::log("pFacesAgent/loginManager", std::string("The user can use the following REST node:") + loginUrl);
@@ -114,13 +146,19 @@ void loginManager(pFacesAgent* pAgent) {
 
 				
 				userLoginJSONstr = pFacesAgentHelper::setLoginDone(userLoginJSONstr, success, msg);
-				pAgent->LoginDictionaryServer->setKeyValue(user_id, userLoginJSONstr);
+				spAgent->LoginDictionaryServer->setKeyValue(user_id, userLoginJSONstr);
 			}
 		}
 
 		// sleep for a while !
 		std::this_thread::sleep_for(THREAD_SLEEP_TIME);
+
+		// update the kill signal
+		spAgent->sp_kill_signal_mutex->lock();
+		the_kill_signal = spAgent->kill_signal;
+		spAgent->sp_kill_signal_mutex->unlock();
 	}
+	Logger::log("pFacesAgent/loginManager", std::string("Login thread is done."));
 }
 
 
@@ -155,6 +193,7 @@ bool pFacesAgent::initializeLoginDictionary() {
 // public members
 pFacesAgent::pFacesAgent(const AgentConfigs& configs) {
 	m_configs = configs;
+	sp_kill_signal_mutex = std::make_shared<std::mutex>();
 }
 
 int pFacesAgent::run() {
@@ -166,7 +205,8 @@ int pFacesAgent::run() {
 
 	// run the login manager thread
 	try {
-		loginManagerThread = std::make_shared<std::thread>(loginManager, this);
+		std::shared_ptr<pFacesAgent> spAgent(this);
+		loginManagerThread = std::make_shared<std::thread>(loginManager, spAgent);
 		Logger::log("pFacesAgent/run", "A thread is created to handle user login requests. pFaces-Agent is now running !");
 	}
 	catch (...) {
@@ -179,11 +219,17 @@ int pFacesAgent::run() {
 
 int pFacesAgent::kill() {
 	try {
+		sp_kill_signal_mutex->lock();
 		kill_signal = true;
+		sp_kill_signal_mutex->unlock();
+		Logger::log("pFacesAgent/kill", "kill signal raised. Joining the agent login thread ... ");
 		loginManagerThread->join();
+
+		Logger::log("pFacesAgent/kill", "Joining the agent user threads ... ");
 		for (size_t i = 0; i < userManagerThreads.size(); i++){
 			userManagerThreads[i]->join();
 		}
+
 		Logger::log("pFacesAgent/kill", "Finished killing all active threads.");
 		return 0;
 	}

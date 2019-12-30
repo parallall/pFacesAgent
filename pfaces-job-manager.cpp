@@ -89,8 +89,13 @@ size_t pfacesJobManager::launchJob(const std::string& _launch_cmd) {
 	size_t new_id = pfacesJobs.size() + 1000;
 	std::shared_ptr<pFacesJob> newJob = std::make_shared<pFacesJob>(new_id, _launch_cmd);
 	pfacesJobs.push_back(newJob);
-	newJob->run();
-	return new_id;
+	try {
+		newJob->run();
+		return new_id;
+	}
+	catch (...) {
+		return 0;
+	}
 }
 void pfacesJobManager::killJob(size_t id) {
 	// dont delete the job from the list
@@ -118,9 +123,15 @@ std::string pfacesJobManager::getJobStatus(size_t id) {
 	}
 	return "job-not-found";
 }
-std::string pfacesJobManager::getJobsTableJSON(std::string id_col_name, std::string status_col_name, std::string details_col_name) {
+std::string pfacesJobManager::getJobsTableJSON(
+	std::string id_col_name, 
+	std::string id_cmd_name,
+	std::string status_col_name, 
+	std::string details_col_name) {
+
 	std::vector<std::string> table_head_keys = {
 		id_col_name,
+		id_cmd_name,
 		status_col_name,
 		details_col_name
 	};
@@ -128,7 +139,9 @@ std::string pfacesJobManager::getJobsTableJSON(std::string id_col_name, std::str
 	for (size_t i = 0; i < pfacesJobs.size(); i++){
 		pfacesJobs[i]->refresh();
 		std::vector<std::string> info;
+
 		info.push_back(std::to_string(pfacesJobs[i]->getId()));
+		info.push_back(pfacesJobs[i]->getLaunchCommand());
 		info.push_back(pfacesJobs[i]->statusStr());
 		info.push_back(pfacesJobs[i]->getLaunchCommand());
 	}

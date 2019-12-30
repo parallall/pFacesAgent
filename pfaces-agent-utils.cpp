@@ -8,6 +8,36 @@
 #include <cpprest/json.h>
 
 
+#define MAX_APP_PATH_SIZE 256
+std::string pfacesAgentUtils::getApplicationDirectory() {
+	char cCurrentPath[MAX_APP_PATH_SIZE];
+	int cnt;
+#ifdef _MSC_VER
+	cnt = GetModuleFileNameA(NULL, cCurrentPath, MAX_APP_PATH_SIZE);
+#elif __APPLE__
+	uint32_t size = MAX_APP_PATH_SIZE;
+	cnt = _NSGetExecutablePath(cCurrentPath, &size);
+#else
+	cnt = readlink("/proc/self/exe", cCurrentPath, MAX_APP_PATH_SIZE);
+#endif
+	if (cnt < 0 || cnt >= MAX_APP_PATH_SIZE) {
+		throw std::runtime_error(
+			std::string("pfacesUtils::getApplicationDir: Failed to call the OS-API function to get Current Directory. ") +
+			std::string("cnt=") +
+			std::to_string(cnt)
+		);
+	}
+
+	std::string ret(cCurrentPath);
+	ret = ret.substr(0, ret.find_last_of(PATH_DELIMITER));
+
+	char splitter_char = std::string(PATH_DELIMITER).c_str()[0];
+	if (ret.c_str()[ret.size() - 1] != splitter_char)
+		ret.append(1, splitter_char);
+
+	return ret;
+}
+
 
 // gets a value from the JSON string using a key
 std::string

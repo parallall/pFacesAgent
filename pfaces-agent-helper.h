@@ -6,13 +6,14 @@
 #include <vector>
 
 #include "pfacesRemoteInterface.h"
+#include "pfaces-job-manager.h"
 
 class AgentConfigs {
 public:
 	std::string id;
 	int listen_port;
+	std::string user_data_directory;
 	std::string device_mask;
-	std::string device_ids_list;
 	bool device_abuse;
 };
 
@@ -71,9 +72,16 @@ public:
 #define PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_name "project_update_project_name"
 #define PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_blob "project_update_project_blob"
 
-// User Dictionary: Rubn Request: Options
+// User Dictionary: Run Request: Options
 #define PFACES_AGENT_USER_DICT_PROJECT_RUN_PROJECT_name "project_run_project_name"
 #define PFACES_AGENT_USER_DICT_PROJECT_RUN_DEVICE_id "project_run_device_id"
+#define PFACES_AGENT_USER_DICT_PROJECT_RUN_KERNEL_name "project_run_kernel_name"
+#define PFACES_AGENT_USER_DICT_PROJECT_RUN_KERNEL_dir "project_run_kernel_dir"
+#define PFACES_AGENT_USER_DICT_PROJECT_RUN_CONFIG_path "project_run_config_path"
+#define PFACES_AGENT_USER_DICT_PROJECT_RUN_extras "project_run_extras"
+
+// User Dictionary: Kill Request: Options
+#define PFACES_AGENT_USER_DICT_PROJECT_KILL_JOB_id "project_kill_job_id"
 
 // User Dictionary: List-of-Projects JSON keys
 #define PFACES_AGENT_USER_DICT_PROJECT_LIST_PROJECT_NAME_JSON_KEY "project_name"
@@ -82,6 +90,7 @@ public:
 
 // User Dictionary: List-of-Jobs JSON keys
 #define PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_ID_JSON_KEY "jobs_id"
+#define PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_ID_JSON_CMD "jobs_cmd"
 #define PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_STATUS_JSON_KEY "jobs_status"
 #define PFACES_AGENT_USER_DICT_JOBS_LIST_JOB_DETAILS_JSON_KEY "jobs_details"
 
@@ -91,6 +100,12 @@ public:
 #define PFACES_AGENT_USER_DICT_ACTIVITY_REQUEST_DETAILS_JSON_KEY "activity_request_details"
 #define PFACES_AGENT_USER_DICT_ACTIVITY_REQUEST_RESULT_JSON_KEY "activity_request_result"
 
+class pFacesAgentUserContext {
+public:
+	AgentConfigs spAgentConfigs;
+	std::shared_ptr<pfacesRESTfullDictionaryServer> spUserDictionary;
+	std::shared_ptr<pfacesJobManager> spJobManager;
+};
 
 class pFacesAgentHelper {
 public:
@@ -106,11 +121,6 @@ public:
 		NONE
 	};
 
-	// General
-	static std::string getJSONItemValue(const std::string& JSONstr, const std::string& key);
-	static std::string getSubJSONItemValue(const std::string& JSONstr, const std::string& array_key, const std::string& array_item_key);
-	static std::string updateJSONItemValue(const std::string& JSONstr, const std::string& key, const std::string& new_value);
-
 	// Login Management
 	static bool isLoginNew(const std::string &userLoginJSONstr);	
 	static bool isLoginPermitted(const std::string& userLoginJSONstr);
@@ -125,15 +135,15 @@ public:
 
 	// CR process
 	static std::string commandRequestToString(COMMAND_REQUESTS cr_type);
-	static size_t countPendingCommandRequest(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
-	static std::pair<COMMAND_REQUESTS, bool> processNextPendingCommandRequest(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
+	static size_t countPendingCommandRequest(pFacesAgentUserContext& userContext);
+	static std::pair<COMMAND_REQUESTS, bool> 
+		processNextPendingCommandRequest(pFacesAgentUserContext& userContext);
 
 	// CR processing functions
-	static void processCRUpload(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
-	static void processCRCompile(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
-	static void processCRUpdate(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
-	static void processCRRun(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
-	static void processCRKill(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary);
+	static void processCRUpload(pFacesAgentUserContext& userContext);
+	static void processCRCompile(pFacesAgentUserContext& userContext);
+	static void processCRRun(pFacesAgentUserContext& userContext);
+	static void processCRKill(pFacesAgentUserContext& userContext);
 };
 
 #endif

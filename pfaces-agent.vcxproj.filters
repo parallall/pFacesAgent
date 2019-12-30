@@ -78,4 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="agent.conf" />
+    <None Include="install.bat" />
+    <None Include="uninstall.bat" />
+  </ItemGroup>
 </Project>

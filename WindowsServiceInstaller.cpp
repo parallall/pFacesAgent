@@ -31,7 +31,7 @@ DWORD InstallService(LPCSTR pszServiceName,
 
 	if (GetModuleFileName(NULL, szPath, ARRAYSIZE(szPath)) == 0){ 
 		last_error = GetLastError();
-		ss_cout << "InstallService: GetModuleFileName failed w/err " << last_error << std::endl;
+		ss_cout << "InstallService: GetModuleFileName failed w/err " << last_error;
 		return last_error;
 	}
 
@@ -39,7 +39,7 @@ DWORD InstallService(LPCSTR pszServiceName,
 	schSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
 	if (schSCManager == NULL){
 		last_error = GetLastError();
-		ss_cout << "InstallService: OpenSCManager failed w/err " << last_error << std::endl;
+		ss_cout << "InstallService: OpenSCManager failed w/err " << last_error;
 		return last_error;
 	}
 
@@ -61,7 +61,7 @@ DWORD InstallService(LPCSTR pszServiceName,
 	);
 	if (schService == NULL){
 		last_error = GetLastError();
-		ss_cout << "InstallService: CreateService failed w/err " << last_error << std::endl;
+		ss_cout << "InstallService: CreateService failed w/err " << last_error;
 		
 		CloseServiceHandle(schSCManager);
 		schSCManager = NULL;
@@ -69,7 +69,8 @@ DWORD InstallService(LPCSTR pszServiceName,
 		return last_error;
 	}
 
-	ss_cout << pszServiceName << " is installed." << std::endl;
+
+	ss_cout << pszServiceName << " is installed.";
 
 	CloseServiceHandle(schSCManager);
 	schSCManager = NULL;
@@ -78,6 +79,59 @@ DWORD InstallService(LPCSTR pszServiceName,
 
 	return last_error;
 }
+
+DWORD ChangeServiceDescription(LPCSTR pszServiceName, 
+	LPCSTR pszDescription,
+	std::ostream& ss_cout)
+{
+	SC_HANDLE schSCManager = NULL;
+	SC_HANDLE schService = NULL;
+	SERVICE_STATUS ssSvcStatus = {};
+	DWORD last_error = 0;
+
+	// Open the local default service control manager database
+	schSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_CONNECT);
+	if (schSCManager == NULL) {
+		last_error = GetLastError();
+		ss_cout << "UninstallService: OpenSCManager failed w/err " << last_error;
+		return last_error;
+	}
+
+	// Open the service with full permissions
+	schService = OpenService(schSCManager, pszServiceName, SERVICE_ALL_ACCESS);
+	if (schService == NULL) {
+		last_error = GetLastError();
+		ss_cout << "UninstallService: OpenService failed w/err " << last_error;
+
+		CloseServiceHandle(schSCManager);
+		schSCManager = NULL;
+
+		return last_error;
+	}
+
+	// setting the service description
+	SERVICE_DESCRIPTION descrInfo;
+	descrInfo.lpDescription = (LPSTR)pszDescription;
+	BOOL cngDescrStatus = ChangeServiceConfig2(schService, SERVICE_CONFIG_DESCRIPTION, &descrInfo);
+	if (cngDescrStatus == FALSE) {
+		last_error = GetLastError();
+		ss_cout << "Failed to set the service describtion w/err " << last_error;
+		return last_error;
+	}
+
+
+	if (last_error == 0)
+		ss_cout << pszServiceName << " has now a new description.";
+
+	// Centralized cleanup for all allocated resources.
+	CloseServiceHandle(schSCManager);
+	schSCManager = NULL;
+	CloseServiceHandle(schService);
+	schService = NULL;
+
+	return last_error;
+}
+
 
 
 DWORD UninstallService(LPCSTR pszServiceName, std::ostream& ss_cout)
@@ -91,7 +145,7 @@ DWORD UninstallService(LPCSTR pszServiceName, std::ostream& ss_cout)
 	schSCManager = OpenSCManager(NULL, NULL, SC_MANAGER_CONNECT);
 	if (schSCManager == NULL){
 		last_error = GetLastError();
-		ss_cout << "UninstallService: OpenSCManager failed w/err " << last_error << std::endl;
+		ss_cout << "UninstallService: OpenSCManager failed w/err " << last_error;
 		return last_error;
 	}
 
@@ -99,7 +153,7 @@ DWORD UninstallService(LPCSTR pszServiceName, std::ostream& ss_cout)
 	schService = OpenService(schSCManager, pszServiceName, SERVICE_STOP | SERVICE_QUERY_STATUS | DELETE);
 	if (schService == NULL){
 		last_error = GetLastError();
-		ss_cout << "UninstallService: OpenService failed w/err " << last_error << std::endl;
+		ss_cout << "UninstallService: OpenService failed w/err " << last_error;
 		
 		CloseServiceHandle(schSCManager);
 		schSCManager = NULL;
@@ -131,11 +185,11 @@ DWORD UninstallService(LPCSTR pszServiceName, std::ostream& ss_cout)
 	// Now remove the service by calling DeleteService.
 	if (!DeleteService(schService)){
 		last_error = GetLastError();
-		ss_cout << "UninstallService: DeleteService failed w/err " << last_error << std::endl;
+		ss_cout << "UninstallService: DeleteService failed w/err " << last_error;
 	}
 
 	if (last_error == 0)
-		ss_cout << pszServiceName << " is removed." << std::endl;
+		ss_cout << pszServiceName << " is removed.";
 
 	// Centralized cleanup for all allocated resources.
 	CloseServiceHandle(schSCManager);

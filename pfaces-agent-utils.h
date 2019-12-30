@@ -16,14 +16,12 @@
 #include <fcntl.h>  
 
 #define PATH_DELIMITER "\\"
-#define USER_DATA_DIRECTORY "C:" PATH_DELIMITER "pfaces_user_data" PATH_DELIMITER
 #define MAKE_DIR(x) _mkdir(x)
 #define POPEN _popen
 #define PCLOSE _pclose
 #else
 #include <sys/stat.h>
 #define PATH_DELIMITER "/"
-#define USER_DATA_DIRECTORY PATH_DELIMITER "pfaces_user_data" PATH_DELIMITER
 #define MAKE_DIR(x) mkdir(x,????)
 #define POPEN popen
 #define PCLOSE pclose
@@ -44,6 +42,7 @@ public:
 	static std::string makeJSONTable(const std::vector<std::string>& table_head_keys, const std::vector<std::vector<std::string>>& table_rows);
 
 	// file sys
+	static std::string getApplicationDirectory();
 	static void make_directory(const std::string& path);
 	static std::vector<std::string> get_path_directories(const std::string& path);
 

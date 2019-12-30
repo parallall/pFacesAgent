@@ -103,6 +103,10 @@
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
+    <PostBuildEvent>
+      <Command>COPY $(ProjectDir)\agent.conf $(TargetDir)\agent.conf
+COPY $(ProjectDir)\*.bat $(TargetDir)\</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -123,6 +127,10 @@
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
+    <PostBuildEvent>
+      <Command>COPY $(ProjectDir)\agent.conf $(TargetDir)\agent.conf
+COPY $(ProjectDir)\*.bat $(TargetDir)\</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -143,6 +151,10 @@
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
+    <PostBuildEvent>
+      <Command>COPY $(ProjectDir)\agent.conf $(TargetDir)\agent.conf
+COPY $(ProjectDir)\*.bat $(TargetDir)\</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -166,6 +178,10 @@
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
+    <PostBuildEvent>
+      <Command>COPY $(ProjectDir)\agent.conf $(TargetDir)\agent.conf
+COPY $(ProjectDir)\*.bat $(TargetDir)\</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="base64.h" />
@@ -195,6 +211,11 @@
     <ProjectReference Include="lib\zipper\zipper.vcxproj">
       <Project>{85243104-a933-405e-86f5-868226cd498c}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="agent.conf" />
+    <None Include="install.bat" />
+    <None Include="uninstall.bat" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

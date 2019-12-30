@@ -52,6 +52,10 @@ DWORD InstallService(LPCSTR pszServiceName,
 	std::ostream& ss_cout);
 
 
+DWORD ChangeServiceDescription(LPCSTR pszServiceName,
+	LPCSTR pszDescription,
+	std::ostream& ss_cout);
+
 //
 //   FUNCTION: UninstallService
 //

@@ -1,15 +1,14 @@
-#include "pfaces-agent-helper.h"
-#include "Logger.h"
-
 #include <string>
 #include <functional>
 #include <iostream>
 #include <fstream>
 
-
+#include "pfaces-agent-utils.h"
+#include "pfaces-agent-helper.h"
+#include "Logger.h"
 #include "base64.h"
 #include "zipper.h"
-#include "pfaces-agent-utils.h"
+
 
 // the next vectors are together-related and used for calling the 
 // processor functions
@@ -25,7 +24,7 @@ std::vector<pFacesAgentHelper::COMMAND_REQUESTS> CR_Types = {
 	pFacesAgentHelper::COMMAND_REQUESTS::RUN,
 	pFacesAgentHelper::COMMAND_REQUESTS::KILL
 };
-std::vector<std::function<void(const std::shared_ptr<pfacesRESTfullDictionaryServer>&)>> CR_processors = {
+std::vector<std::function<void(pFacesAgentUserContext&)>> CR_processors = {
 	pFacesAgentHelper::processCRUpload,
 	pFacesAgentHelper::processCRCompile,
 	pFacesAgentHelper::processCRRun,
@@ -93,8 +92,7 @@ std::string getDevicesListJSON(std::string device_mask) {
 	};
 	return pfacesAgentUtils::makeJSONTable(table_head_keys, devices_list);
 }
-std::string getProjectsList(std::string user_id) {
-	std::string user_path = std::string(USER_DATA_DIRECTORY) + user_id + std::string(PATH_DELIMITER);
+std::string getProjectsList(std::string user_path) {
 	std::vector<std::string> projects_dirs = pfacesAgentUtils::get_path_directories(user_path);
 	std::string ret;
 	for (size_t i = 0; i < projects_dirs.size(); i++)
@@ -170,7 +168,7 @@ pFacesAgentHelper::initializeUserDictionary(const std::string& user_id, const Ag
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_AGENT_VERSION, "1.0"));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PFACES_VERSION, getpFacesVersion()));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_busy));
-	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PROJECT_LIST, getProjectsList(user_id)));
+	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PROJECT_LIST, getProjectsList(configs.user_data_directory + std::string(PATH_DELIMITER) + user_id)));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_DEVICE_LIST, getDevicesListJSON(configs.device_mask)));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_JOBS_LIST, ""));
 
@@ -193,12 +191,11 @@ std::string pFacesAgentHelper::commandRequestToString(pFacesAgentHelper::COMMAND
 }
 
 
-size_t pFacesAgentHelper::countPendingCommandRequest(
-	const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
+size_t pFacesAgentHelper::countPendingCommandRequest(pFacesAgentUserContext& userContext) {
 
 	size_t cnt = 0;
 	for (size_t i = 0; i < CRs_to_check.size(); i++){
-		std::string cr_json = userDictionary->getKeyValue(CRs_to_check[i]);
+		std::string cr_json = userContext.spUserDictionary->getKeyValue(CRs_to_check[i]);
 		std::string cr_status = pfacesAgentUtils::getJSONItemValue(cr_json, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_JSON_KEY);
 
 		if (cr_status == PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_submitted)
@@ -207,12 +204,12 @@ size_t pFacesAgentHelper::countPendingCommandRequest(
 	return cnt;
 }
 
-std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> pFacesAgentHelper::processNextPendingCommandRequest(
-	const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
+std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> 
+pFacesAgentHelper::processNextPendingCommandRequest(pFacesAgentUserContext& userContext) {
 
 
 	for (size_t i = 0; i < CRs_to_check.size(); i++){
-		std::string cr_json = userDictionary->getKeyValue(CRs_to_check[i]);
+		std::string cr_json = userContext.spUserDictionary->getKeyValue(CRs_to_check[i]);
 		std::string cr_status = pfacesAgentUtils::getJSONItemValue(cr_json, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_JSON_KEY);
 		if (cr_status == PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_submitted) {
 			
@@ -220,19 +217,19 @@ std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> pFacesAgentHelper::processN
 				cr_json,
 				PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_JSON_KEY,
 				PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_processing);
-			userDictionary->setKeyValue(
+			userContext.spUserDictionary->setKeyValue(
 				CRs_to_check[i],
 				cr_json);
 
 			try {
 				// do the task
-				CR_processors[i](userDictionary);
+				CR_processors[i](userContext);
 
 				cr_json = pfacesAgentUtils::updateJSONItemValue(
 					cr_json,
 					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_JSON_KEY,
 					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_done);
-				userDictionary->setKeyValue(
+				userContext.spUserDictionary->setKeyValue(
 					CRs_to_check[i],
 					cr_json);
 
@@ -249,7 +246,7 @@ std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> pFacesAgentHelper::processN
 					cr_json,
 					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_MESSAGE_JSON_KEY,
 					std::string("exception: ") + std::string(ex.what()));
-				userDictionary->setKeyValue(
+				userContext.spUserDictionary->setKeyValue(
 					CRs_to_check[i],
 					cr_json);
 
@@ -264,10 +261,10 @@ std::pair<pFacesAgentHelper::COMMAND_REQUESTS, bool> pFacesAgentHelper::processN
 
 
 // CR Processors
-void pFacesAgentHelper::processCRUpload(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
+void pFacesAgentHelper::processCRUpload(pFacesAgentUserContext& userContext) {
 
 	// save the project file from the blob
-	std::string cr_upload = userDictionary->getKeyValue(PFACES_AGENT_USER_DICT_COMMAND_REQUEST_UPLOAD);
+	std::string cr_upload = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_COMMAND_REQUEST_UPLOAD);
 
 	// upload-specific stuff
 	std::string proj_name = pfacesAgentUtils::getSubJSONItemValue(
@@ -285,8 +282,8 @@ void pFacesAgentHelper::processCRUpload(const std::shared_ptr<pfacesRESTfullDict
 	std::vector<unsigned char> blob = Base64::decode(proj_blob64);
 
 	// save as binary
-	std::string user_id = userDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
-	std::string user_dir = std::string(USER_DATA_DIRECTORY) + user_id;
+	std::string user_id = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
+	std::string user_dir = userContext.spAgentConfigs.user_data_directory + std::string(PATH_DELIMITER) + user_id;
 	std::string file_path = user_dir + std::string(PATH_DELIMITER) + proj_name + std::string(".zip");
 
 	pfacesAgentUtils::make_directory(user_dir);
@@ -295,24 +292,82 @@ void pFacesAgentHelper::processCRUpload(const std::shared_ptr<pfacesRESTfullDict
 	file.close();
 
 	// decompress
-	std::string project_path = std::string(USER_DATA_DIRECTORY) + user_id + std::string(PATH_DELIMITER) + proj_name + std::string(PATH_DELIMITER);
+	std::string project_path = userContext.spAgentConfigs.user_data_directory + std::string(PATH_DELIMITER) + user_id + std::string(PATH_DELIMITER) + proj_name + std::string(PATH_DELIMITER);
 	pfacesAgentUtils::make_directory(project_path);
 	Zipper::uncompressFile(file_path, project_path);
 
 	// update projects list
-	std::string projects_list = userDictionary->getKeyValue(PFACES_AGENT_USER_DICT_PROJECT_LIST);
+	std::string projects_list = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_PROJECT_LIST);
 	std::vector<std::string> projects = pfacesUtils::sStr2Vector<std::string>(projects_list);
 	if (!pfacesUtils::isVectorElement(projects, proj_name)) {
 		projects.push_back(proj_name);
 	}
-	userDictionary->setKeyValue(PFACES_AGENT_USER_DICT_PROJECT_LIST, projects_list);
+	userContext.spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_PROJECT_LIST, projects_list);
 }
-void pFacesAgentHelper::processCRCompile(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
+void pFacesAgentHelper::processCRCompile(pFacesAgentUserContext& userContext) {
 	throw std::runtime_error("CR Processor not implemeted yet !");
 }
-void pFacesAgentHelper::processCRRun(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
-	throw std::runtime_error("CR Processor not implemeted yet !");
+void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
+	std::string cr_run = 
+		userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_COMMAND_REQUEST_RUN);
+
+	// run-specific stuff
+	std::string proj_name = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_PROJECT_name);
+	std::string dev_id = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_DEVICE_id);
+	std::string kernel_name = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_KERNEL_name);
+	std::string kernel_dir = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_KERNEL_dir);
+	std::string config_path = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_CONFIG_path);
+	std::string config_run_extras = pfacesAgentUtils::getSubJSONItemValue(
+		cr_run, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_RUN_extras);
+
+	if(proj_name.empty() || dev_id.empty() || kernel_name.empty() || kernel_dir.empty())
+		throw std::runtime_error("project name, device id, and kernel name/dir must not be empty");
+
+	// make the command
+	std::string user_id = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
+	std::string project_path = 
+		userContext.spAgentConfigs.user_data_directory + std::string(PATH_DELIMITER) + user_id +
+		std::string(PATH_DELIMITER) + proj_name + std::string(PATH_DELIMITER);
+
+	std::string cmd =
+		std::string("pfaces -") + userContext.spAgentConfigs.device_mask +
+		std::string(" -d ") + dev_id +
+		std::string(" -k ") + kernel_name + std::string("@") + project_path + kernel_dir +
+		std::string(" -cfg ") + kernel_dir + config_path +
+		std::string(" ") + config_run_extras;
+
+	// launch it
+	size_t jobId = userContext.spJobManager->launchJob(cmd);
+	if(jobId == 0)
+		throw std::runtime_error("Failed to lauch the pFaces job.");
 }
-void pFacesAgentHelper::processCRKill(const std::shared_ptr<pfacesRESTfullDictionaryServer>& userDictionary) {
-	throw std::runtime_error("CR Processor not implemeted yet !");
+void pFacesAgentHelper::processCRKill(pFacesAgentUserContext& userContext) {
+
+	std::string cr_kill =
+		userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_COMMAND_REQUEST_RUN);
+
+	// kill-specific stuff
+	std::string job_id = pfacesAgentUtils::getSubJSONItemValue(
+		cr_kill, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_KILL_JOB_id);
+
+	try {
+		size_t id = atoll(job_id.c_str());
+		userContext.spJobManager->killJob(id);
+	}
+	catch (...) {
+		throw std::runtime_error("Failed to kill the pFaces job.");
+	}
+
 }

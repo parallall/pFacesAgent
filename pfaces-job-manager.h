@@ -46,7 +46,11 @@ public:
 	std::string getJobOutput(size_t id);
 	std::string getJobStatus(size_t id);
 
-	std::string getJobsTableJSON(std::string id_col_name, std::string status_col_name, std::string details_col_name);
+	std::string getJobsTableJSON(
+		std::string id_col_name, 
+		std::string id_cmd_name,
+		std::string status_col_name, 
+		std::string details_col_name);
 };
 
 #endif // !PFACES_JOB

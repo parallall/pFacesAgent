@@ -1,5 +1,6 @@
 /*NOTE: PFACES_BUILD_FOR_INTERFACES is defined in the project ! */
 #include "pfaces-agent.h"
+#include "pfaces-agent-utils.h"
 #include "Logger.h"
 #include "pfacesConfiguration.h"
 #include "pfacesIO.h"
@@ -16,10 +17,10 @@
 #define pFacesAgentManager pFacesDaemonManager
 #endif // _MSC_VER
 
-#define AGENT_MAIN "pfaces-agent\\main"
-#define TEST_MODE
+#define AGENT_MAIN "pfaces-agent/main"
 
 
+//#define TEST_MODE
 #ifdef TEST_MODE
 std::shared_ptr<pFacesAgent> spSingleAgent;
 void exitSignalHandler(int signum) {
@@ -48,20 +49,50 @@ int main(int argc, char* argv[]) {
 	while (true)std::this_thread::sleep_for(std::chrono::milliseconds(100));;
 }
 #else
-int main(int argc, char* argv[]) {
-
-	// Args
-	std::string cmd = std::string(argv[1]);
-	std::string config_file = std::string(argv[2]);
-	
-	// check the supplied arguments 
-	if (argc != 3) {
-		Logger::log(AGENT_MAIN, "Invalid number of arguments. pfaces-agent.exe must recieve the command and config file. Exiting ... !");
-		return -1;
+std::vector<AgentConfigs> fetchConfigs(std::string config_file) {
+	pfacesConfigurationReader config_reader = pfacesConfigurationReader(config_file, "");
+	try {
+		config_reader.parse(nullptr, nullptr);
+	} catch (std::exception ex) {
+		Logger::log("fetchConfigs",
+			std::string("Configuration parse error: ") +
+			std::string(ex.what())
+		);
+		return {};
 	}
 
-	// The launch mode
+	int num_agents = config_reader.readConfigValueInt("num_agents");
+	if (num_agents < 1) {
+		Logger::log("fetchConfigs", "Configuration file error: num_agents must be >= 1.");
+		return {};
+	}
+	
+	
+	std::vector<AgentConfigs> configs(num_agents);
+	for (size_t i = 0; i < num_agents; i++) {
+		std::string config_path = std::string("Agent") + std::to_string(i) + std::string(".");
+		configs[i].id = atoll(config_reader.readConfigValueString(config_path + std::string("id")).c_str());
+		configs[i].device_mask = config_reader.readConfigValueString(config_path + std::string("device_mask"));
+		configs[i].listen_port = atoll(config_reader.readConfigValueString(config_path + std::string("listen_port")).c_str());
+		configs[i].device_abuse = (config_reader.readConfigValueString(config_path + std::string("device_abuse")) == std::string("true"));
+		configs[i].user_data_directory = config_reader.readConfigValueString(config_path + std::string("user_data_directory"));
+	}
+
+	return configs;
+}
+
+int main(int argc, char* argv[]) {
+	
+	// what command ?
+	std::string cmd;
+	if (argc == 2)
+		cmd = std::string(argv[1]);
+	else
+		cmd = "-run";
+
+	// prepare
 	LaunchModes launch_event;
+	std::vector<AgentConfigs> configs;
 	if (cmd == std::string("-install")) {
 		launch_event = LaunchModes::INSTALL;
 		Logger::log(AGENT_MAIN, "Launch event set to install.");
@@ -73,44 +104,32 @@ int main(int argc, char* argv[]) {
 	else if (cmd == std::string("-run")) {
 		launch_event = LaunchModes::RUN;
 		Logger::log(AGENT_MAIN, "Launch event set to run.");
-	}
-	else {
-		Logger::log(AGENT_MAIN, "Invalid launch command. pfaces-agent.exe must recieve one of the following launch commands: -install, -uninstall, or -run. Exiting ... !");
-		return -1;
-	}
 
-	// launch configurations
-	if (!pfacesFileIO::isFileExist(config_file)) {
-		Logger::log(AGENT_MAIN, "Configuration file not found. Existing ... !");
-		return -1;
-	}
-	Logger::log(AGENT_MAIN, "reading the agents configs.");
-	pfacesConfigurationReader config_reader = pfacesConfigurationReader(config_file, "");
-	int num_agents = config_reader.readConfigValueInt("num_agents");
-	if(num_agents < 1) {
-		Logger::log(AGENT_MAIN, "Configuration file error: num_agents must be >= 1. Existing ... !");
-		return -1;
-	}
-	std::vector<AgentConfigs> configs(num_agents);
-	for (size_t i = 0; i < num_agents; i++) {
-		std::string agent_config_path = std::string("agent") + std::to_string(i) + std::string(".");
-
-		configs[i].id = config_reader.readConfigValueString(agent_config_path + std::string("id"));
-		configs[i].device_mask = config_reader.readConfigValueString(agent_config_path + std::string("device_mask"));
-		configs[i].listen_port = config_reader.readConfigValueInt(agent_config_path + std::string("listen_port"));
-	}
-
-	// launching
-	Logger::log(AGENT_MAIN, "Creating the service/daemon and calling its launch method.");
-	pFacesAgentManager agentManager(configs);
-	if (launch_event == LaunchModes::RUN) {
-		if (!CServiceBase::Run(agentManager)){
-			wprintf(L"Service failed to run w/err 0x%08lx\n", GetLastError());
+		// reading launch configurations
+		std::string config_file = pfacesAgentUtils::getApplicationDirectory() + "agent.conf";
+		if (!pfacesFileIO::isFileExist(config_file)) {
+			Logger::log(AGENT_MAIN, "Configuration file not found. Existing ... !");
+			return -1;
+		}
+		Logger::log(AGENT_MAIN, "Reading the agents configs.");
+		configs = fetchConfigs(config_file);
+		if (configs.size() == 0) {
+			Logger::log(AGENT_MAIN, "Failed to fetch the agent configurations. Existing ... !");
+			return -1;
 		}
 	}
 	else {
-		agentManager.launch(launch_event);
+		Logger::log(AGENT_MAIN, 
+			std::string("Invalid launch command (") + cmd +
+			std::string("). pfaces-agent.exe must recieve one of the following launch commands: -install, -uninstall, or -run. Exiting ... !")
+		);
+		return -1;
 	}
+
+	// launch
+	Logger::log(AGENT_MAIN, "Creating the service/daemon and calling its launch method.");
+	pFacesAgentManager agentManager(configs);
+	agentManager.launch(launch_event);
 	
 	
 	// Maybe later:

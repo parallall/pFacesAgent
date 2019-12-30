@@ -10,7 +10,7 @@
 #include "pfacesRemoteInterface.h"
 #include "pfaces-agent-helper.h"
 
-enum LaunchModes {
+enum class LaunchModes {
 	RUN,
 	INSTALL,
 	UNINSTALL,
@@ -39,6 +39,7 @@ public:
 	std::vector<std::shared_ptr<std::thread>> userManagerThreads;
 
 	// kill signal for all threads
+	std::shared_ptr<std::mutex> sp_kill_signal_mutex;
 	bool kill_signal = false;
 
 	// last assigned port 
