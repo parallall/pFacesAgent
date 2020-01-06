@@ -3,19 +3,13 @@
 
 
 pFacesJob::pFacesJob(size_t _id, const std::string& _launch_cmd) {
-	launch_cmd = _launch_cmd;
+	control_pack = std::make_shared<non_blocking_thread_pack>();
+	control_pack->launch_cmd = _launch_cmd;
 	id = _id;
 	status = PFACES_JOB_STATUS::idle;
-
-	output = std::make_shared<std::string>("");
-	done_notifier = std::make_shared<bool>();
-	*done_notifier = false;
-	kill_signal = std::make_shared<bool>();
-	*kill_signal = false;
-	thread_mutex = std::make_shared<std::mutex>();
 }
 std::string pFacesJob::getLaunchCommand() {
-	return launch_cmd;
+	return control_pack->launch_cmd;
 }
 size_t pFacesJob::getId() {
 	return id;
@@ -23,16 +17,16 @@ size_t pFacesJob::getId() {
 std::string pFacesJob::statusStr() {
 	switch (status)
 	{
-	case pFacesJob::PFACES_JOB_STATUS::idle:
+	case PFACES_JOB_STATUS::idle:
 		return "idle";
 		break;
-	case pFacesJob::PFACES_JOB_STATUS::started:
+	case PFACES_JOB_STATUS::started:
 		return "started";
 		break;
-	case pFacesJob::PFACES_JOB_STATUS::finished:
+	case PFACES_JOB_STATUS::finished:
 		return "finished";
 		break;
-	case pFacesJob::PFACES_JOB_STATUS::killed:
+	case PFACES_JOB_STATUS::killed:
 		return "killed";
 		break;
 	default:
@@ -41,12 +35,13 @@ std::string pFacesJob::statusStr() {
 	}
 }
 std::string pFacesJob::outputStr() {
-	thread_mutex->lock();
-	return *output;
-	thread_mutex->unlock();
+	std::lock_guard<std::mutex> lock(control_pack->thread_mutex);
+	return control_pack->output;
 }
 void pFacesJob::refresh() {
-	// TODO: upodate status + get latest output
+	std::lock_guard<std::mutex> lock(control_pack->thread_mutex);
+	if (control_pack->done_notifier)
+		status = PFACES_JOB_STATUS::finished;
 }
 void pFacesJob::run() {
 	if (status == PFACES_JOB_STATUS::started || 
@@ -54,14 +49,10 @@ void pFacesJob::run() {
 		status == PFACES_JOB_STATUS::killed)
 		return;
 
-	job_thread = std::make_shared<std::thread>(
-			pfacesAgentUtils::exec_non_blocking_thread_ready,
-			launch_cmd,
-			output,	
-			done_notifier,
-			kill_signal,
-			thread_mutex
-		);
+	job_thread = std::thread(
+		pfacesAgentUtils::exec_non_blocking_thread_ready,
+		control_pack
+	);
 
 	status = PFACES_JOB_STATUS::started;
 }
@@ -76,59 +67,80 @@ void pFacesJob::kill() {
 		return;
 	}
 
-	thread_mutex->lock();
-	*kill_signal = true;
-	thread_mutex->unlock();
-	job_thread->join();
+	{
+		std::lock_guard<std::mutex> lock(control_pack->thread_mutex);
+		control_pack->kill_signal = true;
+	}
+	job_thread.join();
 
 	status = PFACES_JOB_STATUS::killed;
 }
 
 
 size_t pfacesJobManager::launchJob(const std::string& _launch_cmd) {
+	std::lock_guard<std::mutex> lock(work_coordinator);
 	size_t new_id = pfacesJobs.size() + 1000;
-	std::shared_ptr<pFacesJob> newJob = std::make_shared<pFacesJob>(new_id, _launch_cmd);
-	pfacesJobs.push_back(newJob);
+	pfacesJobs.push_back(std::make_shared<pFacesJob>(new_id, _launch_cmd));
+	size_t ret;
 	try {
-		newJob->run();
-		return new_id;
+		pfacesJobs[pfacesJobs.size()-1]->run();
+		ret = new_id;
 	}
 	catch (...) {
-		return 0;
+		ret = 0;
 	}
+	return ret;
 }
 void pfacesJobManager::killJob(size_t id) {
+	std::lock_guard<std::mutex> lock(work_coordinator);
 	// dont delete the job from the list
 	// otherwise, you need to changine the IDing mechanism
 	for (size_t i = 0; i < pfacesJobs.size(); i++){
 		if (pfacesJobs[i]->getId() == id) {
+			pfacesJobs[i]->refresh();
 			pfacesJobs[i]->kill();
-			return;
+			break;
 		}
 	}
 }
 std::string pfacesJobManager::getJobOutput(size_t id) {
+	std::lock_guard<std::mutex> lock(work_coordinator);
+	std::string ret;
 	for (size_t i = 0; i < pfacesJobs.size(); i++) {
 		if (pfacesJobs[i]->getId() == id) {
-			return pfacesJobs[i]->outputStr();
+			pfacesJobs[i]->refresh();
+			ret = pfacesJobs[i]->outputStr();
+			break;
 		}
 	}
-	return "job-not-found";
+	if (ret.empty())
+		return "job-not-found";
+	else
+		return ret;
 }
 std::string pfacesJobManager::getJobStatus(size_t id) {
+	std::lock_guard<std::mutex> lock(work_coordinator);
+	std::string ret;
 	for (size_t i = 0; i < pfacesJobs.size(); i++) {
 		if (pfacesJobs[i]->getId() == id) {
-			return pfacesJobs[i]->statusStr();
+			pfacesJobs[i]->refresh();
+			ret = pfacesJobs[i]->statusStr();
+			break;
 		}
 	}
-	return "job-not-found";
+	if (ret.empty())
+		return "job-not-found";
+	else
+		return ret;
 }
 std::string pfacesJobManager::getJobsTableJSON(
 	std::string id_col_name, 
 	std::string id_cmd_name,
 	std::string status_col_name, 
 	std::string details_col_name) {
-
+	
+	std::lock_guard<std::mutex> lock(work_coordinator);
+	size_t num_jobs = pfacesJobs.size();
 	std::vector<std::string> table_head_keys = {
 		id_col_name,
 		id_cmd_name,
@@ -136,16 +148,18 @@ std::string pfacesJobManager::getJobsTableJSON(
 		details_col_name
 	};
 	std::vector<std::vector<std::string>> info_list;
-	for (size_t i = 0; i < pfacesJobs.size(); i++){
+	for (size_t i = 0; i < num_jobs; i++){
 		pfacesJobs[i]->refresh();
 		std::vector<std::string> info;
 
 		info.push_back(std::to_string(pfacesJobs[i]->getId()));
 		info.push_back(pfacesJobs[i]->getLaunchCommand());
 		info.push_back(pfacesJobs[i]->statusStr());
-		info.push_back(pfacesJobs[i]->getLaunchCommand());
+		info.push_back(pfacesJobs[i]->outputStr());
+
+		info_list.push_back(info);
 	}
-	return (pfacesJobs.size() > 0) ?
+	return (num_jobs > 0) ?
 		pfacesAgentUtils::makeJSONTable(table_head_keys, info_list) :
-		"";
+		"no-jobs";
 }

@@ -27,6 +27,7 @@ enum class LaunchModes {
 // The agent is responsible for scheduling betweeen different requests competing on its resources.
 // The agent may help synchronize data with other agents.
 class pFacesAgent {
+	std::shared_ptr<pFacesAgent> spThis;
 public:
 	AgentConfigs m_configs;
 

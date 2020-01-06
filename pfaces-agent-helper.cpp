@@ -42,6 +42,7 @@ std::string getpFacesVersion() {
 }
 std::string getDevicesListJSON(std::string device_mask) {
 	
+	// call pFaces / get devices list
 	std::string cmd = std::string("pfaces -") + device_mask + std::string(" -l -v0");
 	std::string cmd_result = pfacesAgentUtils::exec_blocking(cmd);
 
@@ -95,8 +96,11 @@ std::string getDevicesListJSON(std::string device_mask) {
 std::string getProjectsList(std::string user_path) {
 	std::vector<std::string> projects_dirs = pfacesAgentUtils::get_path_directories(user_path);
 	std::string ret;
-	for (size_t i = 0; i < projects_dirs.size(); i++)
-		ret += projects_dirs[i];	
+	for (size_t i = 0; i < projects_dirs.size(); i++){
+		ret += projects_dirs[i];
+		if (i != (projects_dirs.size() - 1))
+			ret += ", ";
+	}
 	return 	ret;
 }
 
@@ -168,7 +172,7 @@ pFacesAgentHelper::initializeUserDictionary(const std::string& user_id, const Ag
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_AGENT_VERSION, "1.0"));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PFACES_VERSION, getpFacesVersion()));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_AGENT_STATUS, PFACES_AGENT_USER_DICT_AGENT_STATUS_busy));
-	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PROJECT_LIST, getProjectsList(configs.user_data_directory + std::string(PATH_DELIMITER) + user_id)));
+	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_PROJECT_LIST, getProjectsList(configs.user_data_directory + std::string(PATH_DELIMITER) + user_id + std::string(PATH_DELIMITER))));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_DEVICE_LIST, getDevicesListJSON(configs.device_mask)));
 	keyValuePairs.push_back(std::make_pair(PFACES_AGENT_USER_DICT_JOBS_LIST, ""));
 
@@ -233,6 +237,13 @@ pFacesAgentHelper::processNextPendingCommandRequest(pFacesAgentUserContext& user
 					CRs_to_check[i],
 					cr_json);
 
+				// clear any blob
+				cr_json = pfacesAgentUtils::updateJSONItemValue(cr_json,
+					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_BLOB_JSON_KEY, "");
+				userContext.spUserDictionary->setKeyValue(
+					CRs_to_check[i],
+					cr_json);
+
 				return std::make_pair(CR_Types[i], true);
 
 			}
@@ -246,6 +257,13 @@ pFacesAgentHelper::processNextPendingCommandRequest(pFacesAgentUserContext& user
 					cr_json,
 					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_MESSAGE_JSON_KEY,
 					std::string("exception: ") + std::string(ex.what()));
+				userContext.spUserDictionary->setKeyValue(
+					CRs_to_check[i],
+					cr_json);
+
+				// clear any blob
+				cr_json = pfacesAgentUtils::updateJSONItemValue(cr_json,
+					PFACES_AGENT_USER_DICT_COMMAND_REQUEST_BLOB_JSON_KEY, "");
 				userContext.spUserDictionary->setKeyValue(
 					CRs_to_check[i],
 					cr_json);
@@ -270,9 +288,9 @@ void pFacesAgentHelper::processCRUpload(pFacesAgentUserContext& userContext) {
 	std::string proj_name = pfacesAgentUtils::getSubJSONItemValue(
 		cr_upload, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
 		PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_name);
-	std::string proj_blob64 = pfacesAgentUtils::getSubJSONItemValue(
-		cr_upload, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
-		PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_blob);
+
+	std::string proj_blob64 = pfacesAgentUtils::getJSONItemValue(cr_upload, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_BLOB_JSON_KEY);
+	//std::string proj_blob64 = pfacesAgentUtils::getSubJSONItemValue( cr_upload, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY, PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_blob);
 
 	if (proj_name.empty() || proj_blob64.empty()) {
 		throw std::runtime_error("project name and project blob must not be empty");
@@ -334,6 +352,9 @@ void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
 	if(proj_name.empty() || dev_id.empty() || kernel_name.empty() || kernel_dir.empty())
 		throw std::runtime_error("project name, device id, and kernel name/dir must not be empty");
 
+	if (kernel_dir == std::string("."))
+		kernel_dir = std::string("kernel-pack");
+
 	// make the command
 	std::string user_id = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
 	std::string project_path = 
@@ -343,9 +364,20 @@ void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
 	std::string cmd =
 		std::string("pfaces -") + userContext.spAgentConfigs.device_mask +
 		std::string(" -d ") + dev_id +
+
 		std::string(" -k ") + kernel_name + std::string("@") + project_path + kernel_dir +
-		std::string(" -cfg ") + kernel_dir + config_path +
-		std::string(" ") + config_run_extras;
+		
+		(
+		(config_path.empty())?
+			(std::string("")):
+			(std::string(" -cfg ") + project_path + std::string(PATH_DELIMITER) + config_path)
+		) 
+		+ 
+		(
+			config_run_extras.empty()?
+			std::string(""):
+			(std::string(" ") + config_run_extras)
+		);
 
 	// launch it
 	size_t jobId = userContext.spJobManager->launchJob(cmd);

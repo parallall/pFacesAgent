@@ -33,6 +33,15 @@ enum class EXEC_STATUS {
 	PIPE_CLOSED
 };
 
+class non_blocking_thread_pack {
+public:
+	std::string launch_cmd;
+	std::string output = "";
+	bool done_notifier = false;
+	bool kill_signal = false;
+	std::mutex thread_mutex;
+};
+
 class pfacesAgentUtils{
 public:
 	// json
@@ -48,12 +57,7 @@ public:
 
 	// processes
 	static std::string exec_blocking(std::string cmd);
-	static void exec_non_blocking_thread_ready(
-		const std::string& cmd,
-		std::shared_ptr<std::string> result,
-		std::shared_ptr<bool> done_notifier,
-		std::shared_ptr<bool> kill_signal,
-		std::shared_ptr<std::mutex> thread_mutex);
+	static void exec_non_blocking_thread_ready(std::shared_ptr<non_blocking_thread_pack> control_pack);
 };
 
 #endif // !PFACES_AGENT_UTILS

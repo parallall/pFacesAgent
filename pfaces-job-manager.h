@@ -6,27 +6,24 @@
 #include <thread>
 #include <mutex>
 
-// a class to maintain a running job
-class pFacesJob {
-	enum class PFACES_JOB_STATUS {
-		idle,
-		started,
-		finished,
-		killed
-	};
+#include "pfaces-agent-utils.h"
 
+// a class to maintain a running job
+enum class PFACES_JOB_STATUS {
+	idle,
+	started,
+	finished,
+	killed
+};
+class pFacesJob {
 	size_t id;
-	std::string launch_cmd;
-	PFACES_JOB_STATUS status;
-	
-	std::shared_ptr<std::thread> job_thread;
-	std::shared_ptr <std::string> output;
-	std::shared_ptr<bool> done_notifier;
-	std::shared_ptr<bool> kill_signal;
-	std::shared_ptr<std::mutex> thread_mutex;
+	PFACES_JOB_STATUS status;	
+	std::thread job_thread;	
+	std::shared_ptr<non_blocking_thread_pack> control_pack;
 
 public:
 	pFacesJob(size_t _id, const std::string& _launch_cmd);
+
 	std::string getLaunchCommand();
 	size_t getId();
 	std::string statusStr();
@@ -39,6 +36,7 @@ public:
 
 class pfacesJobManager {
 	std::vector<std::shared_ptr<pFacesJob>> pfacesJobs;
+	std::mutex work_coordinator;
 public:
 	pfacesJobManager() = default;
 	size_t launchJob(const std::string& _launch_cmd);

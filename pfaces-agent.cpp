@@ -80,9 +80,9 @@ void userManager(std::shared_ptr<pFacesAgent> spAgent, size_t userIndexInDiction
 		std::this_thread::sleep_for(THREAD_SLEEP_TIME);
 
 
-		spAgent->sp_kill_signal_mutex->lock();
+
+		std::lock_guard<std::mutex> lock(*(spAgent->sp_kill_signal_mutex));
 		the_kill_signal = spAgent->kill_signal;
-		spAgent->sp_kill_signal_mutex->unlock();
 	}
 }
 
@@ -154,9 +154,8 @@ void loginManager(std::shared_ptr<pFacesAgent> spAgent) {
 		std::this_thread::sleep_for(THREAD_SLEEP_TIME);
 
 		// update the kill signal
-		spAgent->sp_kill_signal_mutex->lock();
+		std::lock_guard<std::mutex> lock(*(spAgent->sp_kill_signal_mutex));
 		the_kill_signal = spAgent->kill_signal;
-		spAgent->sp_kill_signal_mutex->unlock();
 	}
 	Logger::log("pFacesAgent/loginManager", std::string("Login thread is done."));
 }
@@ -184,7 +183,7 @@ bool pFacesAgent::initializeLoginDictionary() {
 	last_assigned_port = m_configs.listen_port;
 
 	Logger::log("pFacesAgent/initializeLoginDictionary", "Login dictionary REST server is running and users now can set/get values from it using the URL:");
-	Logger::log("pFacesAgent/initializeLoginDictionary", LoginDictionaryServer->getUrl());
+	Logger::log("pFacesAgent/initializeLoginDictionary", LoginDictionaryServer->getUrl().c_str());
 
 	return true;
 }
@@ -194,6 +193,7 @@ bool pFacesAgent::initializeLoginDictionary() {
 pFacesAgent::pFacesAgent(const AgentConfigs& configs) {
 	m_configs = configs;
 	sp_kill_signal_mutex = std::make_shared<std::mutex>();
+	spThis = std::shared_ptr<pFacesAgent>(this);
 }
 
 int pFacesAgent::run() {
@@ -205,8 +205,7 @@ int pFacesAgent::run() {
 
 	// run the login manager thread
 	try {
-		std::shared_ptr<pFacesAgent> spAgent(this);
-		loginManagerThread = std::make_shared<std::thread>(loginManager, spAgent);
+		loginManagerThread = std::make_shared<std::thread>(loginManager, spThis);
 		Logger::log("pFacesAgent/run", "A thread is created to handle user login requests. pFaces-Agent is now running !");
 	}
 	catch (...) {
@@ -219,22 +218,28 @@ int pFacesAgent::run() {
 
 int pFacesAgent::kill() {
 	try {
-		sp_kill_signal_mutex->lock();
-		kill_signal = true;
-		sp_kill_signal_mutex->unlock();
+		{
+			std::lock_guard<std::mutex> lock(*(sp_kill_signal_mutex));
+			kill_signal = true;
+		}
 		Logger::log("pFacesAgent/kill", "kill signal raised. Joining the agent login thread ... ");
-		loginManagerThread->join();
+
+		if(loginManagerThread->joinable())
+			loginManagerThread->join();
 
 		Logger::log("pFacesAgent/kill", "Joining the agent user threads ... ");
 		for (size_t i = 0; i < userManagerThreads.size(); i++){
-			userManagerThreads[i]->join();
+			if (userManagerThreads[i]->joinable())
+				userManagerThreads[i]->join();
 		}
 
 		Logger::log("pFacesAgent/kill", "Finished killing all active threads.");
 		return 0;
 	}
-	catch (...) {
-		Logger::log("pFacesAgent/kill", "Failed to kill all active threads.");
+	catch (std::exception ex) {
+		Logger::log("pFacesAgent/kill", 
+			std::string("Failed to kill all active threads: ") + ex.what()
+		);
 		return -1;
 	}	
 }

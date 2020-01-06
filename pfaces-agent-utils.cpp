@@ -165,9 +165,10 @@ std::vector<std::string> pfacesAgentUtils::get_path_directories(const std::strin
 
 
 // execute a command in system
+#define EXEC_BLOCKING_BUFFER_SIZE 1024
 std::string pfacesAgentUtils::exec_blocking(std::string cmd) {
-	char buffer[1024];
-	std::string result = "";
+	char* buffer = (char*)malloc(EXEC_BLOCKING_BUFFER_SIZE);
+	std::string result("");
 	FILE* pipe = POPEN(cmd.c_str(), "r");
 
 	if (!pipe)
@@ -175,44 +176,44 @@ std::string pfacesAgentUtils::exec_blocking(std::string cmd) {
 
 	try {
 		while (fgets(buffer, sizeof buffer, pipe) != NULL) {
-			result += buffer;
+			result += std::string(buffer);
+			buffer[0] = 0;
 		}
 	}
 	catch (...) {
 		PCLOSE(pipe);
+		free(buffer);
 		throw;
 	}
 	PCLOSE(pipe);
+	free(buffer);
 	return result;
 }
 
 // execute a command asynchronously and return a pipe pointer
-void pfacesAgentUtils::exec_non_blocking_thread_ready(
-	const std::string& cmd, 
-	std::shared_ptr<std::string> result, 
-	std::shared_ptr<bool> done_notifier,
-	std::shared_ptr<bool> kill_signal,
-	std::shared_ptr<std::mutex> thread_mutex) {
+#define EXEC_NON_BLOCKING_BUFFER_SIZE 1024
+void pfacesAgentUtils::exec_non_blocking_thread_ready(std::shared_ptr<non_blocking_thread_pack> control_pack) {
 
-	char buffer[1024];
-	FILE* pipe = POPEN(cmd.c_str(), "r");
+	char* buffer = (char*)malloc(EXEC_NON_BLOCKING_BUFFER_SIZE);
+	FILE* pipe = POPEN(control_pack->launch_cmd.c_str(), "r");
 
 	if (!pipe)
 		throw std::runtime_error("exec: popen() failed!");
 
 	try {
-		while (fgets(buffer, sizeof buffer, pipe) != NULL && !(*kill_signal)) {
-			(*thread_mutex).lock();
-			*result += buffer;
-			(*thread_mutex).unlock();
+		while (fgets(buffer, sizeof buffer, pipe) != NULL && !control_pack->kill_signal) {
+			std::lock_guard<std::mutex> lock(control_pack->thread_mutex);
+			control_pack->output += std::string(buffer);
+			buffer[0] = 0;
 		}
 	}
 	catch (...) {
 		PCLOSE(pipe);
+		free(buffer);
 		throw;
 	}
 	PCLOSE(pipe);
-	(*thread_mutex).lock();
-	*done_notifier = true;
-	(*thread_mutex).unlock();
+	free(buffer);
+	std::lock_guard<std::mutex> lock(control_pack->thread_mutex);
+	control_pack->done_notifier = true;
 }

@@ -61,6 +61,7 @@ public:
 #define PFACES_AGENT_USER_DICT_COMMAND_REQUEST_TIME_JSON_KEY "request_time"
 #define PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY "request_option"
 #define PFACES_AGENT_USER_DICT_COMMAND_REQUEST_MESSAGE_JSON_KEY "message"
+#define PFACES_AGENT_USER_DICT_COMMAND_REQUEST_BLOB_JSON_KEY "blob"
 
 // User Dictionary: Request Status values
 #define PFACES_AGENT_USER_DICT_COMMAND_REQUEST_STATUS_submitted "submitted"
@@ -70,7 +71,6 @@ public:
 
 // User Dictionary: Upload Request: Options
 #define PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_name "project_update_project_name"
-#define PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_blob "project_update_project_blob"
 
 // User Dictionary: Run Request: Options
 #define PFACES_AGENT_USER_DICT_PROJECT_RUN_PROJECT_name "project_run_project_name"

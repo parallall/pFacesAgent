@@ -20,13 +20,13 @@
 #define AGENT_MAIN "pfaces-agent/main"
 
 
-//#define TEST_MODE
+#define TEST_MODE
 #ifdef TEST_MODE
 std::shared_ptr<pFacesAgent> spSingleAgent;
 void exitSignalHandler(int signum) {
 	Logger::log("TEST_MODE/main", "Got CTRL-C signal. Exiting .... ");
 	spSingleAgent->kill();
-	exit(signum);
+	exit(0);
 }
 int main(int argc, char* argv[]) {
 	LaunchModes launch_event;
@@ -35,6 +35,7 @@ int main(int argc, char* argv[]) {
 	agent_config.id = "agent_0";
 	agent_config.device_mask = "CG";
 	agent_config.listen_port = 8000;
+	agent_config.user_data_directory = "C:\\pFacesAgent0_data\\";
 
 	spSingleAgent = std::make_shared<pFacesAgent>(agent_config);
 	Logger::log("TEST_MODE/main", "launching a single agent !");

@@ -8,6 +8,25 @@
 #include "miniz.h"
 #include "zipper.h"
 
+#ifdef _MSC_VER
+#include <windows.h>
+#include <tchar.h>
+#include <direct.h>
+#include <stdio.h>
+#include <fcntl.h>  
+
+#define PATH_DELIMITER "\\"
+#define MAKE_DIR(x) _mkdir(x)
+#define POPEN _popen
+#define PCLOSE _pclose
+#else
+#include <sys/stat.h>
+#define PATH_DELIMITER "/"
+#define MAKE_DIR(x) mkdir(x,????)
+#define POPEN popen
+#define PCLOSE pclose
+#endif
+
 #define ZIPPER_ZIP_FILE_COMMENT "Zipped with Zipper!"
 
 void Zipper::compressFiles(const std::vector<std::string>& fileNames, const std::string targetFile, int level)
@@ -96,8 +115,11 @@ std::vector<std::string> Zipper::uncompressFile(const std::string& filename, con
             continue;
 
         // skip directories
-        if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
+        if (mz_zip_reader_is_file_a_directory(&zip_archive, i)) {
+            std::string theDir = (destDir.empty() ? "." : destDir) + std::string(file_stat.m_filename);
+            MAKE_DIR(theDir.c_str());
             continue;
+        }
 
         std::string destFileName = (destDir.empty()? ".": destDir) + std::string(file_stat.m_filename);
         fileNames.push_back(destFileName);
