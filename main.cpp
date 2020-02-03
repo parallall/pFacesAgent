@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
 	agent_config.device_mask = "CG";
 	agent_config.listen_port = 8000;
 	agent_config.user_data_directory = "C:\\pFacesAgent0_data\\";
+	agent_config.build_command = "'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe' %PROJECT_PATH%\\%PROJECT_NAME%.sln /property:Configuration=Release /property:Platform=x64";
 
 	spSingleAgent = std::make_shared<pFacesAgent>(agent_config);
 	Logger::log("TEST_MODE/main", "launching a single agent !");
@@ -77,6 +78,7 @@ std::vector<AgentConfigs> fetchConfigs(std::string config_file) {
 		configs[i].listen_port = atoll(config_reader.readConfigValueString(config_path + std::string("listen_port")).c_str());
 		configs[i].device_abuse = (config_reader.readConfigValueString(config_path + std::string("device_abuse")) == std::string("true"));
 		configs[i].user_data_directory = config_reader.readConfigValueString(config_path + std::string("user_data_directory"));
+		configs[i].build_command = config_reader.readConfigValueString(config_path + std::string("build_command"));		
 	}
 
 	return configs;

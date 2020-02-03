@@ -320,10 +320,42 @@ void pFacesAgentHelper::processCRUpload(pFacesAgentUserContext& userContext) {
 	if (!pfacesUtils::isVectorElement(projects, proj_name)) {
 		projects.push_back(proj_name);
 	}
+	projects_list = "";
+	for (size_t i = 0; i < projects.size(); i++) {
+		if (projects[i].empty() || projects[i] == std::string(""))
+			continue;
+		projects_list += projects[i];
+		if (i != (projects.size() - 1))
+			projects_list += ", ";
+	}
 	userContext.spUserDictionary->setKeyValue(PFACES_AGENT_USER_DICT_PROJECT_LIST, projects_list);
 }
 void pFacesAgentHelper::processCRCompile(pFacesAgentUserContext& userContext) {
-	throw std::runtime_error("CR Processor not implemeted yet !");
+
+	std::string cr_compile =
+		userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_COMMAND_REQUEST_COMPILE);
+
+	std::string proj_name = pfacesAgentUtils::getSubJSONItemValue(
+		cr_compile, PFACES_AGENT_USER_DICT_COMMAND_REQUEST_OPTION_JSON_KEY,
+		PFACES_AGENT_USER_DICT_PROJECT_COMPILE_PROJECT_name);
+
+	if (proj_name.empty())
+		throw std::runtime_error("project name must not be empty");
+
+	// make the command
+	std::string user_id = userContext.spUserDictionary->getKeyValue(PFACES_AGENT_USER_DICT_USER_ID);
+	std::string project_path =
+		userContext.spAgentConfigs.user_data_directory + std::string(PATH_DELIMITER) + user_id +
+		std::string(PATH_DELIMITER) + proj_name + std::string(PATH_DELIMITER);
+
+	std::string cmd = userContext.spAgentConfigs.build_command;
+	cmd = pfacesUtils::strReplaceAll(cmd, "%PROJECT_PATH%", project_path);
+	cmd = pfacesUtils::strReplaceAll(cmd, "%PROJECT_NAME%", proj_name);
+	cmd = pfacesUtils::strReplaceAll(cmd, "'", "\"");
+
+	size_t jobId = userContext.spJobManager->launchJob(cmd);
+	if (jobId == 0)
+		throw std::runtime_error("Failed to lauch the build job.");
 }
 void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
 	std::string cr_run = 
@@ -364,7 +396,7 @@ void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
 	std::string cmd =
 		std::string("pfaces -") + userContext.spAgentConfigs.device_mask +
 		std::string(" -d ") + dev_id +
-
+		std::string(" -p ") +
 		std::string(" -k ") + kernel_name + std::string("@") + project_path + kernel_dir +
 		
 		(
@@ -382,7 +414,7 @@ void pFacesAgentHelper::processCRRun(pFacesAgentUserContext& userContext) {
 	// launch it
 	size_t jobId = userContext.spJobManager->launchJob(cmd);
 	if(jobId == 0)
-		throw std::runtime_error("Failed to lauch the pFaces job.");
+		throw std::runtime_error("Failed to lauch the pFaces run job.");
 }
 void pFacesAgentHelper::processCRKill(pFacesAgentUserContext& userContext) {
 

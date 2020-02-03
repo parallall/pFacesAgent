@@ -15,6 +15,7 @@ public:
 	std::string user_data_directory;
 	std::string device_mask;
 	bool device_abuse;
+	std::string build_command;
 };
 
 // Login Dictionary: Keys/values for the submitted JSON object
@@ -71,6 +72,9 @@ public:
 
 // User Dictionary: Upload Request: Options
 #define PFACES_AGENT_USER_DICT_PROJECT_UPLOAD_PROJECT_name "project_update_project_name"
+
+// User Dictionary: Compile Request: Options
+#define PFACES_AGENT_USER_DICT_PROJECT_COMPILE_PROJECT_name "project_compile_project_name"
 
 // User Dictionary: Run Request: Options
 #define PFACES_AGENT_USER_DICT_PROJECT_RUN_PROJECT_name "project_run_project_name"

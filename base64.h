@@ -10,7 +10,7 @@ class Base64 {
 	static inline bool is_base64(BYTE c);
 
 public:
-	static std::string encode(BYTE const* buf, unsigned int bufLen);
+	static std::string encode(BYTE const* buf, size_t bufLen);
 	static std::vector<BYTE> decode(std::string const&);
 };
 
